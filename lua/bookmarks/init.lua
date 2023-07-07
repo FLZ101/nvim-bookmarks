@@ -1,7 +1,7 @@
 local marks = vim.split('ABCDEFGHIJKLMNOPQRSTUVWXYZ', '', {})
 
-local sign_name = 'bookmarks_sign_name'
-local sign_group = 'bookmarks_sign_group'
+local sign_name = 'BookmarksSignName'
+local sign_group = 'BookmarksSignGroup'
 
 local augroup = nil
 
@@ -19,38 +19,6 @@ function try_to_place_sign(bufnr)
 
   for _, v in pairs(get_bookmarks()) do
     if vim.fn.bufnr(v.file) == bufnr then
-      vim.fn.sign_place(get_id(v.mark), sign_group, sign_name, bufnr, { lnum = v.lnum })
-    end
-  end
-end
-
-function setup(opts)
-  -- vim.print(opts)
-
-  opts.ignored_filetypes = opts.ignored_filetypes or {}
-  for _, v in ipairs(opts.ignored_filetypes) do
-    ignored_filetypes[v] = true
-  end
-
-  if #vim.fn.sign_getdefined(sign_name) == 0 then
-    vim.fn.sign_define(sign_name, { text = '󰃀' })
-  end
-
-  if augroup == nil then
-    augroup = vim.api.nvim_create_augroup("bookmarks_augroup", { clear = true })
-    vim.api.nvim_create_autocmd("BufRead", {
-      pattern = '*',
-      callback = function(ev)
-        -- vim.print(ev)
-        try_to_place_sign(ev.buf)
-      end,
-      group = augroup,
-    })
-  end
-
-  for _, v in pairs(get_bookmarks()) do
-    local bufnr = vim.fn.bufnr(v.file)
-    if bufnr ~= -1 then
       vim.fn.sign_place(get_id(v.mark), sign_group, sign_name, bufnr, { lnum = v.lnum })
     end
   end
@@ -126,23 +94,46 @@ function clear_bookmarks()
   end
 end
 
-local M = {
-  setup = setup,
-  toggle_bookmark = toggle_bookmark,
-  get_bookmarks = get_bookmarks,
-  clear_bookmarks = clear_bookmarks,
-  del_bookmark = function()
-    vim.ui.select(get_bookmarks(), {
-        prompt = 'Select one to delete: ',
-        format_item = function(v)
-          return string.format("%s %s:%d", v.mark, v.file, v.lnum)
-        end
-      },
-      function(v)
-        del_bookmark(v.file, v.mark)
-      end)
+-- user commands
+
+function create_user_commands()
+  vim.api.nvim_create_user_command('BookmarksToggle', toggle_bookmark, {})
+  vim.api.nvim_create_user_command('BookmarksClear', clear_bookmarks, {})
+end
+
+function setup(opts)
+  -- vim.print(opts)
+
+  opts.ignored_filetypes = opts.ignored_filetypes or {}
+  for _, v in ipairs(opts.ignored_filetypes) do
+    ignored_filetypes[v] = true
   end
-}
+
+  if #vim.fn.sign_getdefined(sign_name) == 0 then
+    vim.fn.sign_define(sign_name, { text = '󰃀' })
+  end
+
+  if augroup == nil then
+    augroup = vim.api.nvim_create_augroup("BookmarksAugroup", { clear = true })
+    vim.api.nvim_create_autocmd("BufRead", {
+      pattern = '*',
+      callback = function(ev)
+        -- vim.print(ev)
+        try_to_place_sign(ev.buf)
+      end,
+      group = augroup,
+    })
+  end
+
+  for _, v in pairs(get_bookmarks()) do
+    local bufnr = vim.fn.bufnr(v.file)
+    if bufnr ~= -1 then
+      vim.fn.sign_place(get_id(v.mark), sign_group, sign_name, bufnr, { lnum = v.lnum })
+    end
+  end
+
+  create_user_commands()
+end
 
 -- telescope
 
@@ -159,17 +150,12 @@ telescope.opts = {}
 
 telescope.actions = {
   del = function(prompt_bufnr)
-    local v = action_state.get_selected_entry().value
-    del_bookmark(v.file, v.mark)
-
     local picker = action_state.get_current_picker(prompt_bufnr)
-    for _, entry in ipairs(picker:get_multi_selection()) do
-      v = entry.value
-      -- vim.print(v)
+    picker:delete_selection(function(entry)
+      -- vim.print(entry)
+      local v = entry.value
       del_bookmark(v.file, v.mark)
-    end
-
-    picker:refresh(telescope.new_finder())
+    end)
   end,
 
   clear = function(prompt_bufnr)
@@ -192,7 +178,7 @@ telescope.setup = function(ext_config, config)
   setup(telescope.opts)
 end
 
-telescope.new_finder = function ()
+telescope.new_finder = function()
   return finders.new_table({
     results = get_bookmarks(),
     entry_maker = function(v)
@@ -202,7 +188,7 @@ telescope.new_finder = function ()
         display = string.format("%s %s:%d", v.mark, v.file, v.lnum),
         filename = v.file,
         lnum = v.lnum,
-        col = 1,
+        col = 0,
       }
     end,
   })
@@ -229,5 +215,6 @@ telescope.run = function(opts)
       :find()
 end
 
-M.telescope = telescope
-return M
+return {
+  telescope = telescope
+}
